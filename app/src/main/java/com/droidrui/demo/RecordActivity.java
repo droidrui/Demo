@@ -10,6 +10,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.WindowManager;
 
 import com.droidrui.demo.gles.EglCore;
 import com.droidrui.demo.gles.TextureRender;
@@ -53,6 +54,10 @@ public class RecordActivity extends Activity {
     }
 
     private void init() {
+        WindowManager.LayoutParams params = getWindow().getAttributes();
+        params.screenBrightness = 1.0f;
+        getWindow().setAttributes(params);
+
         mSurfaceView = (SurfaceView) findViewById(R.id.surface_view);
         SurfaceHolder sh = mSurfaceView.getHolder();
         sh.addCallback(mCallback);
