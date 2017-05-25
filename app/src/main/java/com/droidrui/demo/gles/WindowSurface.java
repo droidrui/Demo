@@ -12,7 +12,7 @@ public class WindowSurface extends EglSurfaceBase {
     private Surface mSurface;
     private boolean mReleaseSurface;
 
-    protected WindowSurface(EglCore eglCore, Surface surface, boolean releaseSurface) {
+    public WindowSurface(EglCore eglCore, Surface surface, boolean releaseSurface) {
         super(eglCore);
         createWindowSurface(surface);
         mSurface = surface;

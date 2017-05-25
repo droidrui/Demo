@@ -3,15 +3,22 @@ package com.droidrui.demo;
 import android.app.Activity;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
+import android.opengl.GLES20;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Message;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
+import com.droidrui.demo.gles.EglCore;
+import com.droidrui.demo.gles.WindowSurface;
 import com.droidrui.demo.util.Logger;
 import com.droidrui.demo.util.Toaster;
 
 import java.io.File;
+import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.util.List;
 
 public class RecordActivity extends Activity {
@@ -20,10 +27,19 @@ public class RecordActivity extends Activity {
     private static final int VIDEO_HEIGHT = 720;
     private static final int DESIRED_PREVIEW_FPS = 30;
 
+    private SurfaceView mSurfaceView;
+
+    private EglCore mEglCore;
+    private WindowSurface mDisplaySurface;
+    private SurfaceTexture mCameraTexture;
+    private WindowSurface mEncoderSurface;
+    private int mTextureId;
+
+
     private Camera mCamera;
     private int mCameraPreviewThousandFps;
-    private SurfaceTexture mCameraTexture;
 
+    private MainHandler mHandler;
     private File mOutputFile;
 
     @Override
@@ -35,10 +51,11 @@ public class RecordActivity extends Activity {
     }
 
     private void init() {
-        SurfaceView sv = (SurfaceView) findViewById(R.id.surface_view);
-        SurfaceHolder sh = sv.getHolder();
+        mSurfaceView = (SurfaceView) findViewById(R.id.surface_view);
+        SurfaceHolder sh = mSurfaceView.getHolder();
         sh.addCallback(mCallback);
 
+        mHandler = new MainHandler(this);
         mOutputFile = new File(Environment.getExternalStorageDirectory(), "live.mp4");
     }
 
@@ -46,7 +63,22 @@ public class RecordActivity extends Activity {
         @Override
         public void surfaceCreated(SurfaceHolder holder) {
             Logger.e("surfaceCreated holder=" + holder);
+            mEglCore = new EglCore(null, EglCore.FLAG_RECORDABLE);
+            mDisplaySurface = new WindowSurface(mEglCore, holder.getSurface(), false);
+            mDisplaySurface.makeCurrent();
+            int[] textures = new int[1];
+            GLES20.glGenTextures(1, textures, 0);
+            mTextureId = textures[0];
+            mCameraTexture = new SurfaceTexture(mTextureId);
+            mCameraTexture.setOnFrameAvailableListener(mFrameAvailableListener);
 
+            Logger.e("starting camera preview");
+            try {
+                mCamera.setPreviewTexture(mCameraTexture);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            mCamera.startPreview();
         }
 
         @Override
@@ -61,10 +93,17 @@ public class RecordActivity extends Activity {
         }
     };
 
+    private SurfaceTexture.OnFrameAvailableListener mFrameAvailableListener = new SurfaceTexture.OnFrameAvailableListener() {
+        @Override
+        public void onFrameAvailable(SurfaceTexture surfaceTexture) {
+            mHandler.sendEmptyMessage(MainHandler.MSG_FRAME_AVAILABLE);
+        }
+    };
+
     @Override
     protected void onResume() {
         super.onResume();
-
+        openCamera(VIDEO_WIDTH, VIDEO_HEIGHT, DESIRED_PREVIEW_FPS);
     }
 
     private void openCamera(int desiredWidth, int desiredHeight, int desiredFps) {
@@ -145,6 +184,22 @@ public class RecordActivity extends Activity {
     protected void onPause() {
         super.onPause();
         releaseCamera();
+
+        if (mCameraTexture != null) {
+            mCameraTexture.release();
+            mCameraTexture = null;
+        }
+
+        if (mDisplaySurface != null) {
+            mDisplaySurface.release();
+            mDisplaySurface = null;
+        }
+
+        if (mEglCore != null) {
+            mEglCore.release();
+            mEglCore = null;
+        }
+        Logger.e("onPause() done");
     }
 
     private void releaseCamera() {
@@ -154,5 +209,45 @@ public class RecordActivity extends Activity {
             mCamera = null;
             Logger.e("releaseCamera -- done");
         }
+    }
+
+    private static class MainHandler extends Handler {
+
+        public static final int MSG_FRAME_AVAILABLE = 1;
+
+        private WeakReference<RecordActivity> mWeakActivity;
+
+        public MainHandler(RecordActivity activity) {
+            mWeakActivity = new WeakReference<>(activity);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            RecordActivity activity = mWeakActivity.get();
+            if (activity == null) {
+                Logger.e("Got message for dead activity");
+                return;
+            }
+            switch (msg.what) {
+                case MSG_FRAME_AVAILABLE: {
+                    activity.drawFrame();
+                    break;
+                }
+            }
+        }
+    }
+
+    private void drawFrame() {
+        if (mEglCore == null) {
+            Logger.e("Skipping drawFrame after shutdown");
+            return;
+        }
+        mDisplaySurface.makeCurrent();
+        mCameraTexture.updateTexImage();
+
+        int viewWidth = mSurfaceView.getWidth();
+        int viewHeight = mSurfaceView.getHeight();
+        GLES20.glViewport(0, 0, viewWidth, viewHeight);
+        mDisplaySurface.swapBuffers();
     }
 }
