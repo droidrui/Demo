@@ -18,11 +18,11 @@ public class RecordActivity extends Activity {
 
     private static final int VIDEO_WIDTH = 1280;  // dimensions for 720p video
     private static final int VIDEO_HEIGHT = 720;
+    private static final int DESIRED_PREVIEW_FPS = 30;
 
     private Camera mCamera;
     private int mCameraPreviewThousandFps;
     private SurfaceTexture mCameraTexture;
-
 
     private File mOutputFile;
 
