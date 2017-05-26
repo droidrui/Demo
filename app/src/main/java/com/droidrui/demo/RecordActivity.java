@@ -30,6 +30,7 @@ public class RecordActivity extends Activity {
     private static final int DESIRED_PREVIEW_FPS = 30;
 
     private SurfaceView mSurfaceView;
+    private SurfaceHolder mSurfaceHolder;
 
     private EglCore mEglCore;
     private WindowSurface mDisplaySurface;
@@ -44,6 +45,7 @@ public class RecordActivity extends Activity {
 
     private MainHandler mHandler;
     private File mOutputFile;
+    private boolean mPreviewing;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,8 +61,8 @@ public class RecordActivity extends Activity {
         getWindow().setAttributes(params);
 
         mSurfaceView = (SurfaceView) findViewById(R.id.surface_view);
-        SurfaceHolder sh = mSurfaceView.getHolder();
-        sh.addCallback(mCallback);
+        mSurfaceHolder = mSurfaceView.getHolder();
+        mSurfaceHolder.addCallback(mCallback);
 
         mHandler = new MainHandler(this);
         mOutputFile = new File(Environment.getExternalStorageDirectory(), "live.mp4");
@@ -70,24 +72,7 @@ public class RecordActivity extends Activity {
         @Override
         public void surfaceCreated(SurfaceHolder holder) {
             Logger.e("surfaceCreated holder=" + holder);
-            mEglCore = new EglCore(null, EglCore.FLAG_RECORDABLE);
-            mDisplaySurface = new WindowSurface(mEglCore, holder.getSurface(), false);
-            mDisplaySurface.makeCurrent();
-
-            mTextureRender = new TextureRender();
-            mTextureRender.surfaceCreated();
-            mTextureId = mTextureRender.getTextureId();
-            mCameraTexture = new SurfaceTexture(mTextureId);
-            mCameraTexture.setOnFrameAvailableListener(mFrameAvailableListener);
-
-            Logger.e("starting camera preview");
-            try {
-                mCamera.setPreviewTexture(mCameraTexture);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-            mCamera.setDisplayOrientation(90);
-            mCamera.startPreview();
+            mHandler.sendEmptyMessage(MainHandler.MSG_START_PREVIEW);
         }
 
         @Override
@@ -112,7 +97,31 @@ public class RecordActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        Logger.e("onResume -- ");
         openCamera(VIDEO_WIDTH, VIDEO_HEIGHT, DESIRED_PREVIEW_FPS);
+        mHandler.sendEmptyMessage(MainHandler.MSG_START_PREVIEW);
+    }
+
+    private void startPreview() {
+        mEglCore = new EglCore(null, EglCore.FLAG_RECORDABLE);
+        mDisplaySurface = new WindowSurface(mEglCore, mSurfaceHolder.getSurface(), false);
+        mDisplaySurface.makeCurrent();
+
+        mTextureRender = new TextureRender();
+        mTextureRender.surfaceCreated();
+        mTextureId = mTextureRender.getTextureId();
+        mCameraTexture = new SurfaceTexture(mTextureId);
+        mCameraTexture.setOnFrameAvailableListener(mFrameAvailableListener);
+
+        Logger.e("starting camera preview");
+        try {
+            mCamera.setPreviewTexture(mCameraTexture);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        mCamera.setDisplayOrientation(90);
+        mCamera.startPreview();
+        mPreviewing = true;
     }
 
     private void openCamera(int desiredWidth, int desiredHeight, int desiredFps) {
@@ -216,12 +225,14 @@ public class RecordActivity extends Activity {
             mCamera.stopPreview();
             mCamera.release();
             mCamera = null;
+            mPreviewing = false;
             Logger.e("releaseCamera -- done");
         }
     }
 
     private static class MainHandler extends Handler {
 
+        public static final int MSG_START_PREVIEW = 123456;
         public static final int MSG_FRAME_AVAILABLE = 1;
 
         private WeakReference<RecordActivity> mWeakActivity;
@@ -238,6 +249,12 @@ public class RecordActivity extends Activity {
                 return;
             }
             switch (msg.what) {
+                case MSG_START_PREVIEW: {
+                    if (activity.mSurfaceHolder.getSurface().isValid() && !activity.mPreviewing) {
+                        activity.startPreview();
+                    }
+                    break;
+                }
                 case MSG_FRAME_AVAILABLE: {
                     activity.drawFrame();
                     break;
