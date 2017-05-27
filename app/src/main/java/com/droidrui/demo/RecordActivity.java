@@ -10,8 +10,11 @@ import android.os.Handler;
 import android.os.Message;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
 import android.view.WindowManager;
+import android.widget.ImageView;
 
+import com.droidrui.demo.codec.VideoEncoder;
 import com.droidrui.demo.gles.EglCore;
 import com.droidrui.demo.gles.TextureRender;
 import com.droidrui.demo.gles.WindowSurface;
@@ -35,17 +38,25 @@ public class RecordActivity extends Activity {
     private EglCore mEglCore;
     private WindowSurface mDisplaySurface;
     private SurfaceTexture mCameraTexture;
-    private WindowSurface mEncoderSurface;
-    private int mTextureId;
 
+    private int mTextureId;
     private TextureRender mTextureRender;
+
+    private WindowSurface mEncoderSurface;
+    private VideoEncoder mVideoEncoder;
+
+    private File mOutputFile;
 
     private Camera mCamera;
     private int mCameraPreviewThousandFps;
 
     private MainHandler mHandler;
-    private File mOutputFile;
+
     private boolean mPreviewing;
+
+    private ImageView mRecordIv;
+
+    private boolean mRecording;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,13 +71,23 @@ public class RecordActivity extends Activity {
         params.screenBrightness = 1.0f;
         getWindow().setAttributes(params);
 
+        mRecordIv = (ImageView) findViewById(R.id.iv_record);
+        mRecordIv.setOnClickListener(mClickListener);
+
         mSurfaceView = (SurfaceView) findViewById(R.id.surface_view);
         mSurfaceHolder = mSurfaceView.getHolder();
         mSurfaceHolder.addCallback(mCallback);
 
         mHandler = new MainHandler(this);
-        mOutputFile = new File(Environment.getExternalStorageDirectory(), "live.mp4");
+        mOutputFile = new File(Environment.getExternalStorageDirectory(), "video.mp4");
     }
+
+    private View.OnClickListener mClickListener = new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+
+        }
+    };
 
     private SurfaceHolder.Callback mCallback = new SurfaceHolder.Callback() {
         @Override
@@ -122,6 +143,14 @@ public class RecordActivity extends Activity {
         mCamera.setDisplayOrientation(90);
         mCamera.startPreview();
         mPreviewing = true;
+
+        try {
+            mVideoEncoder = new VideoEncoder(mOutputFile.getAbsolutePath(), VIDEO_WIDTH, VIDEO_HEIGHT, 6000000,
+                    mCameraPreviewThousandFps / 1000);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        mEncoderSurface = new WindowSurface(mEglCore, mVideoEncoder.getInputSurface(), true);
     }
 
     private void openCamera(int desiredWidth, int desiredHeight, int desiredFps) {
@@ -203,6 +232,11 @@ public class RecordActivity extends Activity {
         super.onPause();
         releaseCamera();
 
+        if (mVideoEncoder != null) {
+            mVideoEncoder.stopEncode();
+            mVideoEncoder = null;
+        }
+
         if (mCameraTexture != null) {
             mCameraTexture.release();
             mCameraTexture = null;
@@ -276,5 +310,12 @@ public class RecordActivity extends Activity {
         GLES20.glViewport(0, 0, viewWidth, viewHeight);
         mTextureRender.drawFrame(mCameraTexture);
         mDisplaySurface.swapBuffers();
+
+        mEncoderSurface.makeCurrent();
+        GLES20.glViewport(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT);
+        mTextureRender.drawFrame(mCameraTexture);
+        mVideoEncoder.frameAvailableSoon();
+        mEncoderSurface.setPresentationTime(mCameraTexture.getTimestamp());
+        mEncoderSurface.swapBuffers();
     }
 }
