@@ -140,7 +140,6 @@ public class RecordActivity extends Activity {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        mCamera.setDisplayOrientation(90);
         mCamera.startPreview();
         mPreviewing = true;
 
