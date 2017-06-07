@@ -307,12 +307,12 @@ public class RecordActivity extends Activity {
         int viewWidth = mSurfaceView.getWidth();
         int viewHeight = mSurfaceView.getHeight();
         GLES20.glViewport(0, 0, viewWidth, viewHeight);
-        mTextureRender.drawFrame(mCameraTexture);
+        mTextureRender.drawFrame(mCameraTexture, false);
         mDisplaySurface.swapBuffers();
 
         mEncoderSurface.makeCurrent();
         GLES20.glViewport(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT);
-        mTextureRender.drawFrame(mCameraTexture);
+        mTextureRender.drawFrame(mCameraTexture, true);
         mVideoEncoder.frameAvailableSoon();
         mEncoderSurface.setPresentationTime(mCameraTexture.getTimestamp());
         mEncoderSurface.swapBuffers();

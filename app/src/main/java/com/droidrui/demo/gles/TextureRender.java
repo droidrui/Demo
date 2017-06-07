@@ -74,7 +74,7 @@ public class TextureRender {
         return mTextureID;
     }
 
-    public void drawFrame(SurfaceTexture st) {
+    public void drawFrame(SurfaceTexture st, boolean offscreen) {
         checkGlError("onDrawFrame start");
         st.getTransformMatrix(mSTMatrix);
 
@@ -103,7 +103,9 @@ public class TextureRender {
         checkGlError("glEnableVertexAttribArray maTextureHandle");
 
         Matrix.setIdentityM(mMVPMatrix, 0);
-        Matrix.rotateM(mMVPMatrix, 0, 270, 0.0f, 0.0f, 1.0f);
+        if (!offscreen) {
+            Matrix.rotateM(mMVPMatrix, 0, 270, 0.0f, 0.0f, 1.0f);
+        }
         GLES20.glUniformMatrix4fv(muMVPMatrixHandle, 1, false, mMVPMatrix, 0);
         GLES20.glUniformMatrix4fv(muSTMatrixHandle, 1, false, mSTMatrix, 0);
 
